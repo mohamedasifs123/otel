@@ -61,3 +61,19 @@ jobs:
       - name: Stop containers
         if: always()
         run: docker compose down --volumes --remove-orphans
+
+      - name: Test Otel
+        if: always()
+        run: |
+          cd ./otel/traces-demo
+          docker compose up --build --force-recreate --detach
+          echo wait 15s for containers to start... && sleep 15s
+          curl "http://127.0.0.1:16686/api/traces?service=spdk-client&limit=1"
+          
+      - name: Logs
+        if: always()
+        run: docker compose logs
+  
+      - name: Stop containers
+        if: always()
+        run: docker compose down --volumes --remove-orphans          

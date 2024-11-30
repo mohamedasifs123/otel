@@ -1,0 +1,89 @@
+version: "3.7"
+
+services:
+  # Jaeger
+  jaeger-all-in-one:
+    image: jaegertracing/all-in-one:latest
+    restart: always
+    ports:
+      - "16686:16686"
+      - "14268"
+      - "14250"
+    networks:
+      - opi
+
+  # Collector
+  otel-collector:
+    image: otel/opentelemetry-collector:0.88.0
+    restart: always
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "1888:1888"   # pprof extension
+      - "8888:8888"   # Prometheus metrics exposed by the collector
+      - "8889:8889"   # Prometheus exporter metrics
+      - "13133:13133" # health_check extension
+      - "4317:4317"   # OTLP gRPC receiver
+      - "55679:55679" # zpages extension
+    depends_on:
+      - jaeger-all-in-one
+    networks:
+      - opi
+  
+  spdk:
+    image: docker.io/opiproject/spdk:v23.09
+    volumes:
+      - /dev/hugepages:/dev/hugepages
+      - /dev/shm:/dev/shm
+      - /proc:/proc
+    ports:
+      - "9009:9009"
+    privileged: true
+
+    command: |
+      sh -x -c 'sync; echo 1 > /proc/sys/vm/drop_caches  && \
+            echo 1024 > /proc/sys/vm/nr_hugepages && \
+            grep "" /sys/kernel/mm/hugepages/hugepages-*/nr_hugepages && \
+             echo 1024 > /proc/sys/vm/nr_hugepages 
+            nodev /mnt/huge hugetlbfs pagesize=2M 0 0 
+            mkdir -p /mnt/huge 
+            mount -t hugetlbfs -o pagesize=2M none /mnt/huge 
+            mount | grep hugetlbfs 
+           
+            /usr/local/bin/spdk_tgt -m 0x1 -s 512 --no-pci 2>&1 & \
+            echo wait 5s... && sleep 5s && cd /usr/libexec/spdk/scripts && \
+            for i in `seq 1 10`; do ./rpc.py spdk_get_version && break || sleep 1; done  && \
+            ./rpc.py bdev_malloc_create -b Malloc0 64 512 && \
+            ./rpc.py bdev_malloc_create -b Malloc1 64 512 && \
+            ./rpc.py nvmf_create_transport -t TCP -u 8192 -m 4 -c 0  && \
+            ./rpc.py nvmf_create_subsystem nqn.2016-06.io.spdk:cnode1 -a -s SPDK00000000000001 -d SPDK_Controller1  && \
+            ./rpc.py nvmf_subsystem_add_listener nqn.2016-06.io.spdk:cnode1 -t tcp -a 127.0.0.1 -s 4420  && \
+            ./rpc.py nvmf_subsystem_add_ns nqn.2016-06.io.spdk:cnode1 Malloc0 -n 1  && \
+            ./rpc.py nvmf_subsystem_add_ns nqn.2016-06.io.spdk:cnode1 Malloc1 -n 2  && \
+            ./rpc_http_proxy.py 0.0.0.0 9009 spdkuser spdkpass'
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --insecure --user spdkuser:spdkpass -X POST -H 'Content-Type: application/json' -d '{\"id\": 1, \"method\": \"bdev_get_bdevs\"}' http://localhost:9009 || exit 1"]
+      interval: 6s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+    networks:
+      - opi  
+
+  go-app:
+    image: golang:1.23-alpine        
+    working_dir: /app                   
+    volumes:
+      - ./demo-trace:/app 
+    ports:
+      - "57400:57400"                     
+    command: sh -c "go run main.go"     
+    networks:
+      - opi 
+    depends_on:
+      - otel-collector
+      - spdk
+      
+networks:
+  opi:
