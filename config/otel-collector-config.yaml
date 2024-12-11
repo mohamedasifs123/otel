@@ -3,6 +3,18 @@ receivers:
   otlp:
     protocols:
       grpc:
+    
+  hostmetrics:
+    collection_interval: 1m
+    scrapers:
+      cpu:
+      load:
+      memory:
+      disk:
+      filesystem:
+      network:
+      paging:
+      processes:
 
 exporters:
   prometheus:
@@ -30,6 +42,6 @@ service:
       processors: [batch]
       exporters: [logging]
     metrics:
-      receivers: [otlp]
+      receivers: [otlp,hostmetrics]
       processors: [batch]
       exporters: [logging, prometheus]
