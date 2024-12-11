@@ -2,7 +2,7 @@
 receivers:
   otlp:
     protocols:
-      grpc:
+      grpc: 0.0.0.0:4317
     
   hostmetrics:
     collection_interval: 1m
@@ -21,7 +21,12 @@ exporters:
     endpoint: "0.0.0.0:8889"
     const_labels:
       label1: value1
-
+  
+  otlp:
+    endpoint: jaeger-all-in-one:4317
+    tls:
+      insecure: true
+  
   logging:
 
 processors:
@@ -40,7 +45,7 @@ service:
     traces:
       receivers: [otlp]
       processors: [batch]
-      exporters: [logging]
+      exporters: [logging,otlp]
     metrics:
       receivers: [otlp,hostmetrics]
       processors: [batch]
