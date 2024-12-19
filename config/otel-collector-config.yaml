@@ -2,7 +2,7 @@
 receivers:
   otlp:
     protocols:
-      grpc: 0.0.0.0:4317
+      grpc:
     
   hostmetrics:
     collection_interval: 1m
