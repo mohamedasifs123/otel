@@ -166,5 +166,18 @@ func main() {
 		}
 		span.End()
 		time.Sleep(5 * time.Second)
-	}
+		// Health check endpoint
+		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintln(w, "OK")
+		})
+
+		// Application logic
+		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintln(w, "Hello, World!")
+		})
+
+		// Start server
+		http.ListenAndServe(":57400", nil)
+	}	
 }
